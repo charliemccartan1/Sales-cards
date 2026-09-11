@@ -15,9 +15,19 @@
     color: #1a1a1a;
   }
   h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
-  .sub { font-size: 13px; color: #666; margin: 0 0 20px; }
+  .sub { font-size: 13px; color: #666; margin: 0 0 4px; }
+  .pending-banner {
+    font-size: 13px; padding: 8px 12px; border-radius: 8px; margin-bottom: 16px;
+    background: #fff4e0; color: #8a5a00; display: none;
+  }
+  .pending-banner.show { display: block; }
+  .offline-banner {
+    font-size: 13px; padding: 8px 12px; border-radius: 8px; margin-bottom: 16px;
+    background: #fde8e8; color: #a30000; display: none;
+  }
+  .offline-banner.show { display: block; }
   label { font-size: 13px; color: #444; display: block; margin-bottom: 4px; }
-  input[type="text"], input[type="date"] {
+  input[type="text"] {
     width: 100%; height: 44px; font-size: 16px; padding: 0 12px;
     border: 1px solid #ccc; border-radius: 8px; margin-bottom: 14px;
   }
@@ -39,6 +49,7 @@
     background: #1a1a1a; color: white; font-size: 15px; font-weight: 500;
   }
   button.secondary { background: white; color: #1a1a1a; }
+  button:disabled { opacity: 0.5; }
   #saveBtn { width: 100%; margin-bottom: 8px; }
   #status { font-size: 13px; margin-bottom: 20px; min-height: 16px; }
   #status.error { color: #b00020; }
@@ -48,17 +59,17 @@
   .lot-group h3 { font-size: 14px; margin: 0 0 6px; }
   .buyer-line { font-size: 13px; color: #333; display: flex; justify-content: space-between; padding: 3px 0; }
   .buyer-line.repeat { color: #a35b00; font-weight: 500; }
+  .buyer-line.unsynced { color: #8a5a00; }
   .time { color: #888; }
-  datalist {}
+  .tag { font-size: 11px; padding: 1px 6px; border-radius: 10px; background: #fff4e0; color: #8a5a00; margin-left: 6px; }
 </style>
 </head>
 <body>
 
 <h1>Sales cards</h1>
 <p class="sub" id="statusLine">Loading…</p>
-
-<label for="dateInput">Date</label>
-<input type="date" id="dateInput">
+<div class="offline-banner" id="offlineBanner">No connection — entries are being saved on this iPad and will sync automatically once you're back online.</div>
+<div class="pending-banner" id="pendingBanner"></div>
 
 <label for="buyerInput">Buyer name</label>
 <input type="text" id="buyerInput" list="buyerList" placeholder="Start typing a name" autocomplete="off">
@@ -80,10 +91,9 @@
 
 <script>
 // ==== SET THIS to your deployed Apps Script web app URL ====
-const SCRIPT_URL = "https://script.google.com/u/1/home/projects/1d49FO4fXMHks514w9YuREA_t9myH9bPGeU-9rInaEFANl3G2RmGMP5mW/edit";
+const SCRIPT_URL = "PASTE_YOUR_WEB_APP_URL_HERE";
 // =============================================================
 
-const dateInput = document.getElementById("dateInput");
 const buyerInput = document.getElementById("buyerInput");
 const buyerList = document.getElementById("buyerList");
 const lotsBox = document.getElementById("lotsBox");
@@ -93,12 +103,40 @@ const saveBtn = document.getElementById("saveBtn");
 const statusEl = document.getElementById("status");
 const statusLine = document.getElementById("statusLine");
 const lotSummary = document.getElementById("lotSummary");
+const offlineBanner = document.getElementById("offlineBanner");
+const pendingBanner = document.getElementById("pendingBanner");
 
-let todaysLots = JSON.parse(localStorage.getItem("todaysLots") || "[]");
-let allCards = [];
-let allBuyers = [];
+// Default lots for today — edit this list any time you add/change lots.
+const DEFAULT_LOTS = [
+  "Lot 100  BF  Kodi Bear x Ski Club",
+  "Lot 151  BC  Ardad x Tiggy Two",
+  "Lot 204  BC  Kodi Bear x Abashova",
+  "Lot 283  BF  Galiway x Camomile Lawn",
+  "Lot 680  BF  Nando Parrado x Faseeha",
+];
 
-dateInput.value = new Date().toISOString().slice(0, 10);
+let storedLots = JSON.parse(localStorage.getItem("todaysLots") || "null");
+let todaysLots = storedLots && storedLots.length ? storedLots : DEFAULT_LOTS.slice();
+
+// Cached data from the sheet (updated whenever we successfully sync)
+let cachedBuyers = JSON.parse(localStorage.getItem("cachedBuyers") || "[]");
+let cachedCards = JSON.parse(localStorage.getItem("cachedCards") || "[]");
+
+// Queue of entries not yet successfully sent to the sheet
+let queue = JSON.parse(localStorage.getItem("pendingQueue") || "[]");
+
+let syncing = false;
+
+function todayDateStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function saveState() {
+  localStorage.setItem("todaysLots", JSON.stringify(todaysLots));
+  localStorage.setItem("cachedBuyers", JSON.stringify(cachedBuyers));
+  localStorage.setItem("cachedCards", JSON.stringify(cachedCards));
+  localStorage.setItem("pendingQueue", JSON.stringify(queue));
+}
 
 function renderLots() {
   lotsBox.innerHTML = "";
@@ -112,16 +150,12 @@ function renderLots() {
   });
 }
 
-function saveLotsLocally() {
-  localStorage.setItem("todaysLots", JSON.stringify(todaysLots));
-}
-
 addLotBtn.onclick = () => {
   const val = newLotInput.value.trim();
   if (!val) return;
   if (!todaysLots.includes(val)) {
     todaysLots.push(val);
-    saveLotsLocally();
+    saveState();
     renderLots();
   }
   newLotInput.value = "";
@@ -132,34 +166,43 @@ function setStatus(msg, cls) {
   statusEl.className = cls || "";
 }
 
-async function loadData() {
-  try {
-    const res = await fetch(SCRIPT_URL + "?action=data");
-    const data = await res.json();
-    allBuyers = data.buyers || [];
-    allCards = data.cards || [];
-    buyerList.innerHTML = allBuyers.map(b => `<option value="${b}">`).join("");
-    statusLine.textContent = `${allBuyers.length} known buyers · ${allCards.length} cards recorded`;
-    renderSummary();
-  } catch (err) {
-    statusLine.textContent = "Couldn't connect to the sheet. Check your connection.";
+function updateBanners() {
+  offlineBanner.classList.toggle("show", !navigator.onLine);
+  if (queue.length > 0) {
+    pendingBanner.classList.add("show");
+    pendingBanner.textContent = `${queue.length} entr${queue.length === 1 ? "y" : "ies"} waiting to sync…`;
+  } else {
+    pendingBanner.classList.remove("show");
   }
 }
 
+// Merge cached (synced) cards with anything still sitting in the queue,
+// so the on-screen summary and repeat-buyer detection are always accurate,
+// even before a sync happens.
+function allVisibleCards() {
+  const queued = queue.map(q => ({
+    date: q.date, buyer: q.buyer, lot: q.lot, timestamp: q.queuedAt, unsynced: true,
+  }));
+  return cachedCards.concat(queued);
+}
+
+function renderBuyerList() {
+  const names = new Set(cachedBuyers);
+  queue.forEach(q => names.add(q.buyer));
+  buyerList.innerHTML = Array.from(names).map(b => `<option value="${b}">`).join("");
+}
+
 function renderSummary() {
-  const today = dateInput.value;
-  const todaysCards = allCards.filter(c => c.date === today);
+  const today = todayDateStr();
+  const cards = allVisibleCards().filter(c => c.date === today);
   const byLot = {};
-  todaysCards.forEach(c => {
+  cards.forEach(c => {
     if (!byLot[c.lot]) byLot[c.lot] = [];
     byLot[c.lot].push(c);
   });
 
-  // count how many times each buyer appears today (across all lots) for repeat flag
   const buyerCounts = {};
-  todaysCards.forEach(c => {
-    buyerCounts[c.buyer] = (buyerCounts[c.buyer] || 0) + 1;
-  });
+  cards.forEach(c => { buyerCounts[c.buyer] = (buyerCounts[c.buyer] || 0) + 1; });
 
   const lots = Object.keys(byLot).sort();
   if (lots.length === 0) {
@@ -171,8 +214,9 @@ function renderSummary() {
     const entries = byLot[lot].map(c => {
       const isRepeat = buyerCounts[c.buyer] > 1;
       const time = new Date(c.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      return `<div class="buyer-line ${isRepeat ? "repeat" : ""}">
-        <span>${c.buyer}${isRepeat ? " (repeat)" : ""}</span>
+      const cls = [isRepeat ? "repeat" : "", c.unsynced ? "unsynced" : ""].join(" ");
+      return `<div class="buyer-line ${cls}">
+        <span>${c.buyer}${isRepeat ? " (repeat)" : ""}${c.unsynced ? '<span class="tag">not synced</span>' : ""}</span>
         <span class="time">${time}</span>
       </div>`;
     }).join("");
@@ -180,35 +224,92 @@ function renderSummary() {
   }).join("");
 }
 
-saveBtn.onclick = async () => {
+function renderAll() {
+  renderBuyerList();
+  renderSummary();
+  updateBanners();
+  statusLine.textContent = `${cachedBuyers.length} known buyers · ${cachedCards.length} synced cards`;
+}
+
+// Pull latest buyers/cards from the sheet, when online.
+async function refreshFromSheet() {
+  if (!navigator.onLine || SCRIPT_URL.includes("PASTE_YOUR")) return;
+  try {
+    const res = await fetch(SCRIPT_URL + "?action=data");
+    const data = await res.json();
+    cachedBuyers = data.buyers || [];
+    cachedCards = data.cards || [];
+    saveState();
+  } catch (err) {
+    // silently ignore — we'll just keep showing cached data
+  }
+  renderAll();
+}
+
+// Try to send every queued entry to the sheet. Stops at the first failure
+// (keeps ordering, avoids hammering a dead connection).
+async function syncQueue() {
+  if (syncing || queue.length === 0 || !navigator.onLine) return;
+  if (SCRIPT_URL.includes("PASTE_YOUR")) return;
+  syncing = true;
+
+  while (queue.length > 0) {
+    const item = queue[0];
+    try {
+      await fetch(SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({ buyer: item.buyer, date: item.date, lots: [item.lot] }),
+      });
+      queue.shift();
+      saveState();
+      updateBanners();
+    } catch (err) {
+      break; // stop trying, retry later
+    }
+  }
+
+  syncing = false;
+  await refreshFromSheet();
+}
+
+saveBtn.onclick = () => {
   const buyer = buyerInput.value.trim();
   const checkedLots = Array.from(lotsBox.querySelectorAll(".lot-chip.checked")).map(c => c.dataset.lot);
 
   if (!buyer) { setStatus("Enter a buyer name first.", "error"); return; }
   if (checkedLots.length === 0) { setStatus("Tick at least one lot.", "error"); return; }
-  if (SCRIPT_URL.includes("PASTE_YOUR")) { setStatus("Set your Apps Script URL in the code first.", "error"); return; }
 
-  saveBtn.disabled = true;
-  setStatus("Saving…");
-
-  try {
-    await fetch(SCRIPT_URL, {
-      method: "POST",
-      body: JSON.stringify({ buyer, date: dateInput.value, lots: checkedLots }),
-    });
-    setStatus(`Saved ${buyer} to ${checkedLots.length} lot(s).`, "ok");
-    buyerInput.value = "";
-    lotsBox.querySelectorAll(".lot-chip.checked").forEach(c => c.classList.remove("checked"));
-    buyerInput.focus();
-    await loadData();
-  } catch (err) {
-    setStatus("Save failed — check your connection and try again.", "error");
+  const date = todayDateStr();
+  const now = new Date().toISOString();
+  checkedLots.forEach(lot => {
+    queue.push({ buyer, date, lot, queuedAt: now });
+  });
+  if (!cachedBuyers.some(b => b.toLowerCase() === buyer.toLowerCase())) {
+    cachedBuyers.push(buyer);
   }
-  saveBtn.disabled = false;
+  saveState();
+
+  setStatus(`Saved ${buyer} to ${checkedLots.length} lot(s) locally.`, "ok");
+  buyerInput.value = "";
+  lotsBox.querySelectorAll(".lot-chip.checked").forEach(c => c.classList.remove("checked"));
+  buyerInput.focus();
+
+  renderAll();
+  syncQueue();
 };
 
+window.addEventListener("online", () => {
+  updateBanners();
+  syncQueue();
+});
+window.addEventListener("offline", updateBanners);
+
+// Periodic retry in case the 'online' event doesn't fire reliably on iOS
+setInterval(syncQueue, 15000);
+
 renderLots();
-loadData();
+renderAll();
+refreshFromSheet().then(syncQueue);
 </script>
 </body>
 </html>
