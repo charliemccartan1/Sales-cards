@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Sales Cards</title>
+<title>Fairyhouse 2026</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -14,18 +14,9 @@
     background: #faf9f6;
     color: #1a1a1a;
   }
-  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
-  .sub { font-size: 13px; color: #666; margin: 0 0 4px; }
-  .pending-banner {
-    font-size: 13px; padding: 8px 12px; border-radius: 8px; margin-bottom: 16px;
-    background: #fff4e0; color: #8a5a00; display: none;
-  }
-  .pending-banner.show { display: block; }
-  .offline-banner {
-    font-size: 13px; padding: 8px 12px; border-radius: 8px; margin-bottom: 16px;
-    background: #fde8e8; color: #a30000; display: none;
-  }
-  .offline-banner.show { display: block; }
+  #logo { display: block; max-height: 70px; margin: 0 auto 14px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; text-align: center; }
+  .sub { font-size: 13px; color: #666; margin: 0 0 16px; text-align: center; }
   label { font-size: 13px; color: #444; display: block; margin-bottom: 4px; }
   input[type="text"] {
     width: 100%; height: 44px; font-size: 16px; padding: 0 12px;
@@ -42,34 +33,40 @@
     font-size: 15px; cursor: pointer; user-select: none; background: #fff;
   }
   .lot-chip.checked { background: #1a1a1a; color: white; border-color: #1a1a1a; }
-  .row { display: flex; gap: 8px; margin-bottom: 14px; }
-  .row input { margin-bottom: 0; }
   button {
     height: 44px; padding: 0 18px; border-radius: 8px; border: 1px solid #1a1a1a;
     background: #1a1a1a; color: white; font-size: 15px; font-weight: 500;
   }
-  button.secondary { background: white; color: #1a1a1a; }
-  button:disabled { opacity: 0.5; }
   #saveBtn { width: 100%; margin-bottom: 8px; }
-  #status { font-size: 13px; margin-bottom: 20px; min-height: 16px; }
+  #status { font-size: 13px; margin-bottom: 16px; min-height: 16px; }
   #status.error { color: #b00020; }
   #status.ok { color: #0a7d34; }
-  h2 { font-size: 15px; font-weight: 600; margin: 24px 0 8px; }
-  .lot-group { border: 1px solid #e2e2e2; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; background: white; }
-  .lot-group h3 { font-size: 14px; margin: 0 0 6px; }
-  .buyer-line { font-size: 13px; color: #333; display: flex; justify-content: space-between; padding: 3px 0; }
-  .buyer-line.repeat { color: #a35b00; font-weight: 500; }
-  .buyer-line.unsynced { color: #8a5a00; }
-  .time { color: #888; }
-  .tag { font-size: 11px; padding: 1px 6px; border-radius: 10px; background: #fff4e0; color: #8a5a00; margin-left: 6px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  #pendingBanner {
+    font-size: 13px; border-radius: 8px; padding: 8px 12px; margin-bottom: 14px;
+    background: #f0f0ee; border: 1px solid #ddd; color: #555;
+  }
+  #pendingBanner.has-pending {
+    background: #fff4e0; border-color: #e8c789; color: #7a5200;
+  }
+  .recent-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 13px; background: white; border: 1px solid #e2e2e2; border-radius: 8px;
+    padding: 8px 12px; margin-bottom: 6px;
+  }
+  .recent-row .lot { color: #444; font-weight: 500; }
+  .recent-row .buyer { color: #1a1a1a; }
+  .recent-row .time { color: #888; }
+  .recent-row.pending { border-color: #e8c789; background: #fffaf0; }
+  .recent-row.pending .time { color: #a35b00; }
 </style>
 </head>
 <body>
 
-<h1>Sales cards</h1>
+<img id="logo" src="logo.png" alt="Fairyhouse 2026 logo">
+<h1>Fairyhouse 2026</h1>
 <p class="sub" id="statusLine">Loading…</p>
-<div class="offline-banner" id="offlineBanner">No connection — entries are being saved on this iPad and will sync automatically once you're back online.</div>
-<div class="pending-banner" id="pendingBanner"></div>
+<div id="pendingBanner"></div>
 
 <label for="buyerInput">Buyer name</label>
 <input type="text" id="buyerInput" list="buyerList" placeholder="Start typing a name" autocomplete="off">
@@ -78,238 +75,218 @@
 <label>Lots viewed (tap all that apply)</label>
 <div id="lotsBox"></div>
 
-<div class="row">
-  <input type="text" id="newLotInput" placeholder="Add a lot number for today">
-  <button class="secondary" id="addLotBtn" type="button">Add lot</button>
-</div>
-
-<button id="saveBtn" type="button">Save</button>
+<button id="saveBtn" type="button">Submit</button>
 <div id="status"></div>
 
-<h2>Today, by lot</h2>
-<div id="lotSummary"></div>
+<h2>Recent lots</h2>
+<div id="recentList"></div>
 
 <script>
 // ==== SET THIS to your deployed Apps Script web app URL ====
-const SCRIPT_URL = "PASTE_YOUR_WEB_APP_URL_HERE";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzw_rEfUS7tm2Y-trL73dB-gSB6tcHXJnx6XHom7K_6gzLa8CI6w2P73SSQu6iKbfpWgg/exec";
 // =============================================================
+
+// Each lot has a stable "key" (used as the column header AND the sheet tab
+// name in Google Sheets — must match exactly) and a "label" (what's shown
+// on the button in the app).
+const LOTS = [
+  { key: "Lot 100 - Ski Club",     label: "Lot 100  BF  Kodi Bear x Ski Club" },
+  { key: "Lot 151 - Tiggy Two",    label: "Lot 151  BC  Ardad x Tiggy Two" },
+  { key: "Lot 204 - Abashova",     label: "Lot 204  BC  Kodi Bear x Abashova" },
+  { key: "Lot 283 - Camomile Lawn",label: "Lot 283  BF  Galiway x Camomile Lawn" },
+  { key: "Lot 680 - Faseeha",      label: "Lot 680  BF  Nando Parrado x Faseeha" },
+];
 
 const buyerInput = document.getElementById("buyerInput");
 const buyerList = document.getElementById("buyerList");
 const lotsBox = document.getElementById("lotsBox");
-const newLotInput = document.getElementById("newLotInput");
-const addLotBtn = document.getElementById("addLotBtn");
 const saveBtn = document.getElementById("saveBtn");
 const statusEl = document.getElementById("status");
 const statusLine = document.getElementById("statusLine");
-const lotSummary = document.getElementById("lotSummary");
-const offlineBanner = document.getElementById("offlineBanner");
 const pendingBanner = document.getElementById("pendingBanner");
+const recentList = document.getElementById("recentList");
 
-// Default lots for today — edit this list any time you add/change lots.
-const DEFAULT_LOTS = [
-  "Lot 100  BF  Kodi Bear x Ski Club",
-  "Lot 151  BC  Ardad x Tiggy Two",
-  "Lot 204  BC  Kodi Bear x Abashova",
-  "Lot 283  BF  Galiway x Camomile Lawn",
-  "Lot 680  BF  Nando Parrado x Faseeha",
-];
-
-let storedLots = JSON.parse(localStorage.getItem("todaysLots") || "null");
-let todaysLots = storedLots && storedLots.length ? storedLots : DEFAULT_LOTS.slice();
-
-// Cached data from the sheet (updated whenever we successfully sync)
-let cachedBuyers = JSON.parse(localStorage.getItem("cachedBuyers") || "[]");
-let cachedCards = JSON.parse(localStorage.getItem("cachedCards") || "[]");
-
-// Queue of entries not yet successfully sent to the sheet
-let queue = JSON.parse(localStorage.getItem("pendingQueue") || "[]");
+// queue = entries saved locally but not yet confirmed synced to the Sheet
+let queue = JSON.parse(localStorage.getItem("cardQueue") || "[]");
+// recent = confirmed entries fetched from the Sheet, most recent first
+let recent = [];
+// local buyer cache, so autocomplete works offline
+let allBuyers = JSON.parse(localStorage.getItem("buyerCache") || "[]");
 
 let syncing = false;
 
-function todayDateStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function saveState() {
-  localStorage.setItem("todaysLots", JSON.stringify(todaysLots));
-  localStorage.setItem("cachedBuyers", JSON.stringify(cachedBuyers));
-  localStorage.setItem("cachedCards", JSON.stringify(cachedCards));
-  localStorage.setItem("pendingQueue", JSON.stringify(queue));
-}
-
 function renderLots() {
   lotsBox.innerHTML = "";
-  todaysLots.forEach(lot => {
+  LOTS.forEach(lot => {
     const chip = document.createElement("div");
     chip.className = "lot-chip";
-    chip.textContent = lot;
-    chip.dataset.lot = lot;
+    chip.textContent = lot.label;
+    chip.dataset.key = lot.key;
     chip.onclick = () => chip.classList.toggle("checked");
     lotsBox.appendChild(chip);
   });
 }
-
-addLotBtn.onclick = () => {
-  const val = newLotInput.value.trim();
-  if (!val) return;
-  if (!todaysLots.includes(val)) {
-    todaysLots.push(val);
-    saveState();
-    renderLots();
-  }
-  newLotInput.value = "";
-};
 
 function setStatus(msg, cls) {
   statusEl.textContent = msg;
   statusEl.className = cls || "";
 }
 
-function updateBanners() {
-  offlineBanner.classList.toggle("show", !navigator.onLine);
+function saveQueue() {
+  localStorage.setItem("cardQueue", JSON.stringify(queue));
+}
+
+function updatePendingBanner() {
   if (queue.length > 0) {
-    pendingBanner.classList.add("show");
-    pendingBanner.textContent = `${queue.length} entr${queue.length === 1 ? "y" : "ies"} waiting to sync…`;
+    pendingBanner.textContent = navigator.onLine
+      ? `Syncing ${queue.length} unsynced entr${queue.length === 1 ? "y" : "ies"}…`
+      : `${queue.length} unsynced entr${queue.length === 1 ? "y" : "ies"} — waiting for internet.`;
+    pendingBanner.classList.add("has-pending");
   } else {
-    pendingBanner.classList.remove("show");
+    pendingBanner.textContent = "0 unsynced entries";
+    pendingBanner.classList.remove("has-pending");
   }
 }
 
-// Merge cached (synced) cards with anything still sitting in the queue,
-// so the on-screen summary and repeat-buyer detection are always accurate,
-// even before a sync happens.
-function allVisibleCards() {
-  const queued = queue.map(q => ({
-    date: q.date, buyer: q.buyer, lot: q.lot, timestamp: q.queuedAt, unsynced: true,
-  }));
-  return cachedCards.concat(queued);
+function refreshBuyerList() {
+  buyerList.innerHTML = allBuyers.map(b => `<option value="${b}">`).join("");
 }
 
-function renderBuyerList() {
-  const names = new Set(cachedBuyers);
-  queue.forEach(q => names.add(q.buyer));
-  buyerList.innerHTML = Array.from(names).map(b => `<option value="${b}">`).join("");
-}
-
-function renderSummary() {
-  const today = todayDateStr();
-  const cards = allVisibleCards().filter(c => c.date === today);
-  const byLot = {};
-  cards.forEach(c => {
-    if (!byLot[c.lot]) byLot[c.lot] = [];
-    byLot[c.lot].push(c);
-  });
-
-  const buyerCounts = {};
-  cards.forEach(c => { buyerCounts[c.buyer] = (buyerCounts[c.buyer] || 0) + 1; });
-
-  const lots = Object.keys(byLot).sort();
-  if (lots.length === 0) {
-    lotSummary.innerHTML = '<p style="font-size:13px;color:#888;">No cards recorded yet today.</p>';
-    return;
-  }
-
-  lotSummary.innerHTML = lots.map(lot => {
-    const entries = byLot[lot].map(c => {
-      const isRepeat = buyerCounts[c.buyer] > 1;
-      const time = new Date(c.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      const cls = [isRepeat ? "repeat" : "", c.unsynced ? "unsynced" : ""].join(" ");
-      return `<div class="buyer-line ${cls}">
-        <span>${c.buyer}${isRepeat ? " (repeat)" : ""}${c.unsynced ? '<span class="tag">not synced</span>' : ""}</span>
-        <span class="time">${time}</span>
-      </div>`;
-    }).join("");
-    return `<div class="lot-group"><h3>Lot ${lot}</h3>${entries}</div>`;
-  }).join("");
-}
-
-function renderAll() {
-  renderBuyerList();
-  renderSummary();
-  updateBanners();
-  statusLine.textContent = `${cachedBuyers.length} known buyers · ${cachedCards.length} synced cards`;
-}
-
-// Pull latest buyers/cards from the sheet, when online.
-async function refreshFromSheet() {
-  if (!navigator.onLine || SCRIPT_URL.includes("PASTE_YOUR")) return;
+// Pull latest buyers + recent activity from the Sheet (only works online)
+async function fetchFromServer() {
+  if (SCRIPT_URL.includes("PASTE_YOUR")) return false;
   try {
     const res = await fetch(SCRIPT_URL + "?action=data");
     const data = await res.json();
-    cachedBuyers = data.buyers || [];
-    cachedCards = data.cards || [];
-    saveState();
+    allBuyers = data.buyers || [];
+    recent = data.recent || [];
+    localStorage.setItem("buyerCache", JSON.stringify(allBuyers));
+    refreshBuyerList();
+    return true;
   } catch (err) {
-    // silently ignore — we'll just keep showing cached data
+    return false;
   }
-  renderAll();
 }
 
-// Try to send every queued entry to the sheet. Stops at the first failure
-// (keeps ordering, avoids hammering a dead connection).
+// Push every queued entry to the Sheet. Stops at the first failure so
+// nothing is lost if the connection drops mid-sync.
 async function syncQueue() {
-  if (syncing || queue.length === 0 || !navigator.onLine) return;
+  if (syncing || queue.length === 0) return;
   if (SCRIPT_URL.includes("PASTE_YOUR")) return;
+  if (!navigator.onLine) { updatePendingBanner(); return; }
+
   syncing = true;
+  updatePendingBanner();
 
   while (queue.length > 0) {
-    const item = queue[0];
+    const entry = queue[0];
     try {
       await fetch(SCRIPT_URL, {
         method: "POST",
-        body: JSON.stringify({ buyer: item.buyer, date: item.date, lots: [item.lot] }),
+        body: JSON.stringify({ buyer: entry.buyer, lots: entry.lots }),
       });
       queue.shift();
-      saveState();
-      updateBanners();
+      saveQueue();
     } catch (err) {
-      break; // stop trying, retry later
+      break;
     }
   }
 
   syncing = false;
-  await refreshFromSheet();
+  updatePendingBanner();
+  await fetchFromServer();
+  renderRecent();
+  if (queue.length === 0) {
+    setStatus("All entries synced.", "ok");
+  }
+}
+
+function lotLabelFor(key) {
+  const found = LOTS.find(l => l.key === key);
+  return found ? found.key : key;
+}
+
+function renderRecent() {
+  const pendingRows = queue.flatMap(entry =>
+    entry.lots.map(lotKey => ({
+      buyer: entry.buyer,
+      lot: lotLabelFor(lotKey),
+      time: new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      pending: true,
+    }))
+  );
+
+  const confirmedRows = recent.map(r => ({
+    buyer: r.buyer,
+    lot: lotLabelFor(r.lot),
+    time: r.time,
+    pending: false,
+  }));
+
+  const rows = pendingRows.concat(confirmedRows).slice(0, 15);
+
+  if (rows.length === 0) {
+    recentList.innerHTML = '<p style="font-size:13px;color:#888;">No entries recorded yet.</p>';
+    return;
+  }
+
+  recentList.innerHTML = rows.map(r => `
+    <div class="recent-row ${r.pending ? "pending" : ""}">
+      <span class="lot">${r.lot}</span>
+      <span class="buyer">${r.buyer}${r.pending ? " (syncing…)" : ""}</span>
+      <span class="time">${r.time}</span>
+    </div>
+  `).join("");
 }
 
 saveBtn.onclick = () => {
   const buyer = buyerInput.value.trim();
-  const checkedLots = Array.from(lotsBox.querySelectorAll(".lot-chip.checked")).map(c => c.dataset.lot);
+  const checkedLots = Array.from(lotsBox.querySelectorAll(".lot-chip.checked")).map(c => c.dataset.key);
 
   if (!buyer) { setStatus("Enter a buyer name first.", "error"); return; }
   if (checkedLots.length === 0) { setStatus("Tick at least one lot.", "error"); return; }
 
-  const date = todayDateStr();
-  const now = new Date().toISOString();
-  checkedLots.forEach(lot => {
-    queue.push({ buyer, date, lot, queuedAt: now });
+  queue.push({
+    buyer,
+    lots: checkedLots,
+    timestamp: new Date().toISOString(),
   });
-  if (!cachedBuyers.some(b => b.toLowerCase() === buyer.toLowerCase())) {
-    cachedBuyers.push(buyer);
-  }
-  saveState();
+  saveQueue();
 
-  setStatus(`Saved ${buyer} to ${checkedLots.length} lot(s) locally.`, "ok");
+  if (!allBuyers.some(b => b.toLowerCase() === buyer.toLowerCase())) {
+    allBuyers.push(buyer);
+    localStorage.setItem("buyerCache", JSON.stringify(allBuyers));
+    refreshBuyerList();
+  }
+
+  setStatus(`Submitted ${buyer} for ${checkedLots.length} lot(s).`, "ok");
   buyerInput.value = "";
   lotsBox.querySelectorAll(".lot-chip.checked").forEach(c => c.classList.remove("checked"));
   buyerInput.focus();
 
-  renderAll();
+  renderRecent();
+  updatePendingBanner();
   syncQueue();
 };
 
-window.addEventListener("online", () => {
-  updateBanners();
-  syncQueue();
-});
-window.addEventListener("offline", updateBanners);
-
-// Periodic retry in case the 'online' event doesn't fire reliably on iOS
-setInterval(syncQueue, 15000);
+window.addEventListener("online", syncQueue);
+window.addEventListener("focus", syncQueue);
+setInterval(syncQueue, 30000);
 
 renderLots();
-renderAll();
-refreshFromSheet().then(syncQueue);
+refreshBuyerList();
+updatePendingBanner();
+renderRecent();
+statusLine.textContent = navigator.onLine ? "Connecting…" : "Offline — entries will sync once you're back online.";
+fetchFromServer().then(ok => {
+  if (ok) {
+    statusLine.textContent = "";
+    renderRecent();
+    syncQueue();
+  } else if (navigator.onLine) {
+    statusLine.textContent = "Couldn't reach the sheet — working from local data.";
+  }
+});
 </script>
 </body>
 </html>
