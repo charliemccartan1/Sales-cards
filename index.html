@@ -21,6 +21,23 @@
     width: 100%; height: 44px; font-size: 16px; padding: 0 12px;
     border: 1px solid #ccc; border-radius: 8px; margin-bottom: 14px;
   }
+  #buyerWrap { position: relative; }
+  #buyerWrap input { margin-bottom: 0; }
+  #buyerDropdown {
+    display: none;
+    position: absolute; top: 46px; left: 0; right: 0; z-index: 10;
+    background: white; border: 1px solid #ccc; border-radius: 8px;
+    max-height: 220px; overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  #buyerDropdown.show { display: block; }
+  .buyer-option {
+    padding: 10px 12px; font-size: 15px; cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .buyer-option:last-child { border-bottom: none; }
+  .buyer-option:active, .buyer-option.highlighted { background: #f0f0ee; }
+  #buyerSpacer { margin-bottom: 14px; }
   #lotsBox {
     display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
     border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: white;
@@ -53,8 +70,11 @@
 <h1>Fairyhouse 2026</h1>
 
 <label for="buyerInput">Buyer name</label>
-<input type="text" id="buyerInput" list="buyerList" placeholder="Start typing a name" autocomplete="off">
-<datalist id="buyerList"></datalist>
+<div id="buyerWrap">
+  <input type="text" id="buyerInput" placeholder="Start typing a name" autocomplete="off">
+  <div id="buyerDropdown"></div>
+</div>
+<div id="buyerSpacer"></div>
 
 <label>Lots viewed (tap all that apply)</label>
 <div id="lotsBox"></div>
@@ -83,7 +103,7 @@ const LOTS = [
 ];
 
 const buyerInput = document.getElementById("buyerInput");
-const buyerList = document.getElementById("buyerList");
+const buyerDropdown = document.getElementById("buyerDropdown");
 const lotsBox = document.getElementById("lotsBox");
 const vetCheckbox = document.getElementById("vetCheckbox");
 const saveBtn = document.getElementById("saveBtn");
@@ -117,8 +137,47 @@ function saveQueue() {
 }
 
 function refreshBuyerList() {
-  buyerList.innerHTML = allBuyers.map(b => `<option value="${b}">`).join("");
+  // no-op for the underlying data; rendering happens in renderDropdown()
+  // whenever the user types. Kept as a name for minimal diff elsewhere.
 }
+
+function renderDropdown() {
+  const typed = buyerInput.value.trim().toLowerCase();
+  if (!typed) {
+    buyerDropdown.classList.remove("show");
+    buyerDropdown.innerHTML = "";
+    return;
+  }
+
+  const matches = allBuyers
+    .filter(b => b.toLowerCase().startsWith(typed))
+    .sort((a, b) => a.localeCompare(b));
+
+  if (matches.length === 0) {
+    buyerDropdown.classList.remove("show");
+    buyerDropdown.innerHTML = "";
+    return;
+  }
+
+  buyerDropdown.innerHTML = matches.map(b => `<div class="buyer-option">${b}</div>`).join("");
+  buyerDropdown.classList.add("show");
+
+  buyerDropdown.querySelectorAll(".buyer-option").forEach(opt => {
+    opt.onclick = () => {
+      buyerInput.value = opt.textContent;
+      buyerDropdown.classList.remove("show");
+      buyerDropdown.innerHTML = "";
+    };
+  });
+}
+
+buyerInput.addEventListener("input", renderDropdown);
+buyerInput.addEventListener("focus", renderDropdown);
+document.addEventListener("click", (e) => {
+  if (!document.getElementById("buyerWrap").contains(e.target)) {
+    buyerDropdown.classList.remove("show");
+  }
+});
 
 async function fetchBuyers() {
   if (SCRIPT_URL.includes("PASTE_YOUR")) return;
@@ -182,6 +241,8 @@ saveBtn.onclick = () => {
 
   setStatus(`Submitted ${buyer} for ${checkedLots.length} lot(s).`, "ok");
   buyerInput.value = "";
+  buyerDropdown.classList.remove("show");
+  buyerDropdown.innerHTML = "";
   vetCheckbox.checked = false;
   lotsBox.querySelectorAll(".lot-chip.checked").forEach(c => c.classList.remove("checked"));
   buyerInput.focus();
