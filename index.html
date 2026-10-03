@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Fairyhouse 2026</title>
+<title>Newmarket 2026</title>
 <link rel="apple-touch-icon" href="icon.png">
 <style>
   * { box-sizing: border-box; }
@@ -63,18 +63,30 @@
   #status { font-size: 13px; min-height: 16px; }
   #status.error { color: #b00020; }
   #status.ok { color: #0a7d34; }
+  .tick { color: #0a7d34; font-weight: 600; }
   h2 { font-size: 14px; font-weight: 600; margin: 20px 0 8px; color: #555; }
   .pending-row {
     display: flex; justify-content: space-between; font-size: 13px;
     background: #fffaf0; border: 1px solid #e8c789; border-radius: 8px;
     padding: 8px 12px; margin-bottom: 6px; color: #7a5200;
   }
+  .recent-row {
+    font-size: 13px; background: white; border: 1px solid #e2e2e2; border-radius: 8px;
+    padding: 8px 12px; margin-bottom: 6px;
+  }
+  .recent-row .top-line {
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .recent-row .buyer { font-weight: 500; }
+  .recent-row .buyer .tick { margin-left: 4px; font-size: 12px; }
+  .recent-row .time { color: #888; font-weight: 400; }
+  .recent-row .lots { color: #555; margin-top: 2px; }
 </style>
 </head>
 <body>
 
-<img id="logo" src="logo.png" alt="Fairyhouse 2026 logo">
-<h1>Fairyhouse 2026</h1>
+<img id="logo" src="logo.png" alt="Ballyphilip Stud logo">
+<h1>Newmarket 2026</h1>
 
 <label for="buyerInput">Buyer name</label>
 <div id="buyerWrap">
@@ -97,19 +109,20 @@
 <h2 id="pendingHeading" style="display:none;">Waiting for connection</h2>
 <div id="pendingList"></div>
 
+<h2>Recent lots</h2>
+<div id="recentList"></div>
+
 <script>
 // ==== SET THIS to your deployed Apps Script web app URL ====
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzw_rEfUS7tm2Y-trL73dB-gSB6tcHXJnx6XHom7K_6gzLa8CI6w2P73SSQu6iKbfpWgg/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxYTKnw9Tofp26zia62uTSGgPYYkelWYVZn9mtMbwNC_aEHAjm5yOKua6y5OLy4nKOMBw/exec";
 // =============================================================
 
 // Each lot has a stable "key" (used as the column header AND the sheet tab
 // name in Google Sheets — must match exactly) and a "label" (shown on the button).
 const LOTS = [
-  { key: "Lot 100 - Ski Club",     label: "Lot 100  BF  Kodi Bear x Ski Club" },
-  { key: "Lot 151 - Tiggy Two",    label: "Lot 151  BC  Ardad x Tiggy Two" },
-  { key: "Lot 204 - Abashova",     label: "Lot 204  BC  Kodi Bear x Abashova" },
-  { key: "Lot 283 - Camomile Lawn",label: "Lot 283  BF  Galiway x Camomile Lawn" },
-  { key: "Lot 680 - Faseeha",      label: "Lot 680  BF  Nando Parrado x Faseeha" },
+  { key: "Lot 195 - Queen Jojo", label: "Lot 195  Shaquille x Queen Jojo" },
+  { key: "Lot 391 - Big Break",  label: "Lot 391  Palace Pier x Big Break" },
+  { key: "Lot 413 - Casimia",    label: "Lot 413  New Bay x Casimia" },
 ];
 
 const buyerInput = document.getElementById("buyerInput");
@@ -120,12 +133,19 @@ const saveBtn = document.getElementById("saveBtn");
 const statusEl = document.getElementById("status");
 const pendingHeading = document.getElementById("pendingHeading");
 const pendingList = document.getElementById("pendingList");
+const recentList = document.getElementById("recentList");
 
 // queue = entries saved locally but not yet confirmed synced to the Sheet.
-// Kept silently in the background — no UI messaging about sync/connection status.
 let queue = JSON.parse(localStorage.getItem("cardQueue") || "[]");
 let allBuyers = JSON.parse(localStorage.getItem("buyerCache") || "[]");
+let recent = [];
 let syncing = false;
+let lastSubmittedId = null;
+
+function makeId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 function renderLots() {
   lotsBox.innerHTML = "";
@@ -140,7 +160,7 @@ function renderLots() {
 }
 
 function setStatus(msg, cls) {
-  statusEl.textContent = msg;
+  statusEl.innerHTML = msg;
   statusEl.className = cls || "";
 }
 
@@ -163,9 +183,30 @@ function renderPendingList() {
   ).join("");
 }
 
+function lotLabelFor(key) {
+  const found = LOTS.find(l => l.key === key);
+  return found ? found.key : key;
+}
+
+function renderRecent() {
+  if (recent.length === 0) {
+    recentList.innerHTML = '<p style="font-size:13px;color:#888;">No entries recorded yet.</p>';
+    return;
+  }
+  recentList.innerHTML = recent.map(r => {
+    const lotNames = r.lots.map(l => lotLabelFor(l.key) + (l.isVet ? " (vet)" : "")).join(", ");
+    return `<div class="recent-row">
+      <div class="top-line">
+        <span class="buyer">${r.buyer}<span class="tick">✓</span></span>
+        <span class="time">${r.time}</span>
+      </div>
+      <div class="lots">${lotNames}</div>
+    </div>`;
+  }).join("");
+}
+
 function refreshBuyerList() {
-  // no-op for the underlying data; rendering happens in renderDropdown()
-  // whenever the user types. Kept as a name for minimal diff elsewhere.
+  // rendering happens in renderDropdown() as the user types
 }
 
 function renderDropdown() {
@@ -206,22 +247,27 @@ document.addEventListener("click", (e) => {
   }
 });
 
-async function fetchBuyers() {
+async function fetchData() {
   if (SCRIPT_URL.includes("PASTE_YOUR")) return;
   try {
     const res = await fetch(SCRIPT_URL + "?action=data");
     const data = await res.json();
     allBuyers = data.buyers || [];
+    recent = data.recent || [];
     localStorage.setItem("buyerCache", JSON.stringify(allBuyers));
     refreshBuyerList();
+    renderRecent();
   } catch (err) {
     // silently keep working from local cache
   }
 }
 
-// Push queued entries to the Sheet. Checks the actual response instead of
-// assuming success — a network-level success with an error inside the
-// response body no longer gets silently treated as "synced".
+// Push queued entries to the Sheet, one at a time, waiting for a confirmed
+// response before removing each from the queue. Every entry carries a
+// unique id; the server tracks which ids it has already written, so even
+// if a request is retried after an ambiguous failure (timeout, dropped
+// connection after the server already received it, etc.) it will NOT be
+// written twice — this is what prevents duplicate entries.
 async function syncQueue() {
   if (syncing || queue.length === 0) return;
   if (SCRIPT_URL.includes("PASTE_YOUR")) return;
@@ -233,7 +279,12 @@ async function syncQueue() {
     try {
       const res = await fetch(SCRIPT_URL, {
         method: "POST",
-        body: JSON.stringify({ buyer: entry.buyer, lots: entry.lots, isVet: entry.isVet }),
+        body: JSON.stringify({
+          id: entry.id,
+          buyer: entry.buyer,
+          lots: entry.lots,
+          isVet: entry.isVet,
+        }),
       });
       const text = await res.text();
       let json;
@@ -242,19 +293,23 @@ async function syncQueue() {
       if (!res.ok || !json || json.error || json.ok !== true) {
         console.error("Sync failed for entry", entry, "response:", text);
         setStatus("Couldn't save to the sheet — check the Apps Script deployment.", "error");
-        break; // stop and keep this entry (and the rest) queued
+        break; // stop and keep this entry (and the rest) queued — safe to retry, it's deduped server-side
       }
 
       queue.shift();
       saveQueue();
       renderPendingList();
+
+      if (entry.id === lastSubmittedId) {
+        setStatus(`Submitted ${entry.buyer} for ${entry.lots.length} lot(s). <span class="tick">✓ Synced</span>`, "ok");
+      }
     } catch (err) {
       console.error("Network error during sync:", err);
-      break;
+      break; // network-level failure — safe to retry later, server-side id check prevents duplicates
     }
   }
   syncing = false;
-  fetchBuyers();
+  fetchData();
 }
 
 saveBtn.onclick = () => {
@@ -265,7 +320,9 @@ saveBtn.onclick = () => {
   if (!buyer) { setStatus("Enter a buyer name first.", "error"); return; }
   if (checkedLots.length === 0) { setStatus("Tick at least one lot.", "error"); return; }
 
+  const id = makeId();
   queue.push({
+    id,
     buyer,
     lots: checkedLots,
     isVet,
@@ -273,6 +330,7 @@ saveBtn.onclick = () => {
   });
   saveQueue();
   renderPendingList();
+  lastSubmittedId = id;
 
   if (!allBuyers.some(b => b.toLowerCase() === buyer.toLowerCase())) {
     allBuyers.push(buyer);
@@ -280,7 +338,7 @@ saveBtn.onclick = () => {
     refreshBuyerList();
   }
 
-  setStatus(`Submitted ${buyer} for ${checkedLots.length} lot(s).`, "ok");
+  setStatus(`Submitted ${buyer} for ${checkedLots.length} lot(s). Saving…`, "ok");
   buyerInput.value = "";
   buyerDropdown.classList.remove("show");
   buyerDropdown.innerHTML = "";
@@ -298,7 +356,8 @@ setInterval(syncQueue, 30000);
 renderLots();
 refreshBuyerList();
 renderPendingList();
-fetchBuyers().then(syncQueue);
+renderRecent();
+fetchData().then(syncQueue);
 </script>
 </body>
 </html>
