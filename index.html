@@ -65,11 +65,6 @@
   #status.ok { color: #0a7d34; }
   .tick { color: #0a7d34; font-weight: 600; }
   h2 { font-size: 14px; font-weight: 600; margin: 20px 0 8px; color: #555; }
-  .pending-row {
-    display: flex; justify-content: space-between; font-size: 13px;
-    background: #fffaf0; border: 1px solid #e8c789; border-radius: 8px;
-    padding: 8px 12px; margin-bottom: 6px; color: #7a5200;
-  }
   .recent-row {
     font-size: 13px; background: white; border: 1px solid #e2e2e2; border-radius: 8px;
     padding: 8px 12px; margin-bottom: 6px;
@@ -84,39 +79,36 @@
 </style>
 </head>
 <body>
-
+ 
 <img id="logo" src="logo.png" alt="Ballyphilip Stud logo">
 <h1>Newmarket 2026</h1>
-
+ 
 <label for="buyerInput">Buyer name</label>
 <div id="buyerWrap">
   <input type="text" id="buyerInput" placeholder="Start typing a name" autocomplete="off">
   <div id="buyerDropdown"></div>
 </div>
 <div id="buyerSpacer"></div>
-
+ 
 <label>Lots viewed</label>
 <div id="lotsBox"></div>
-
+ 
 <div class="vet-row">
   <input type="checkbox" id="vetCheckbox">
   <label for="vetCheckbox" style="margin:0;">This is a vet</label>
 </div>
-
+ 
 <button id="saveBtn" type="button">Submit</button>
 <div id="status"></div>
-
-<h2 id="pendingHeading" style="display:none;">Waiting for connection</h2>
-<div id="pendingList"></div>
-
+ 
 <h2>Recent lots</h2>
 <div id="recentList"></div>
-
+ 
 <script>
 // ==== SET THIS to your deployed Apps Script web app URL ====
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxYTKnw9Tofp26zia62uTSGgPYYkelWYVZn9mtMbwNC_aEHAjm5yOKua6y5OLy4nKOMBw/exec";
 // =============================================================
-
+ 
 // Each lot has a stable "key" (used as the column header AND the sheet tab
 // name in Google Sheets — must match exactly) and a "label" (shown on the button).
 const LOTS = [
@@ -124,29 +116,26 @@ const LOTS = [
   { key: "Lot 391 - Big Break",  label: "Lot 391  Palace Pier x Big Break" },
   { key: "Lot 413 - Casimia",    label: "Lot 413  New Bay x Casimia" },
 ];
-
+ 
 const buyerInput = document.getElementById("buyerInput");
 const buyerDropdown = document.getElementById("buyerDropdown");
 const lotsBox = document.getElementById("lotsBox");
 const vetCheckbox = document.getElementById("vetCheckbox");
 const saveBtn = document.getElementById("saveBtn");
 const statusEl = document.getElementById("status");
-const pendingHeading = document.getElementById("pendingHeading");
-const pendingList = document.getElementById("pendingList");
 const recentList = document.getElementById("recentList");
-
+ 
 // queue = entries saved locally but not yet confirmed synced to the Sheet.
 let queue = JSON.parse(localStorage.getItem("cardQueue") || "[]");
 let allBuyers = JSON.parse(localStorage.getItem("buyerCache") || "[]");
 let recent = [];
 let syncing = false;
-let lastSubmittedId = null;
-
+ 
 function makeId() {
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
-
+ 
 function renderLots() {
   lotsBox.innerHTML = "";
   LOTS.forEach(lot => {
@@ -158,36 +147,21 @@ function renderLots() {
     lotsBox.appendChild(chip);
   });
 }
-
+ 
 function setStatus(msg, cls) {
   statusEl.innerHTML = msg;
   statusEl.className = cls || "";
 }
-
+ 
 function saveQueue() {
   localStorage.setItem("cardQueue", JSON.stringify(queue));
 }
-
-function renderPendingList() {
-  if (queue.length === 0) {
-    pendingHeading.style.display = "none";
-    pendingList.innerHTML = "";
-    return;
-  }
-  pendingHeading.style.display = "block";
-  pendingList.innerHTML = queue.map(entry =>
-    `<div class="pending-row">
-      <span>${entry.buyer}</span>
-      <span>${entry.lots.length} lot${entry.lots.length === 1 ? "" : "s"}</span>
-    </div>`
-  ).join("");
-}
-
+ 
 function lotLabelFor(key) {
   const found = LOTS.find(l => l.key === key);
   return found ? found.key : key;
 }
-
+ 
 function renderRecent() {
   if (recent.length === 0) {
     recentList.innerHTML = '<p style="font-size:13px;color:#888;">No entries recorded yet.</p>';
@@ -204,11 +178,11 @@ function renderRecent() {
     </div>`;
   }).join("");
 }
-
+ 
 function refreshBuyerList() {
   // rendering happens in renderDropdown() as the user types
 }
-
+ 
 function renderDropdown() {
   const typed = buyerInput.value.trim().toLowerCase();
   if (!typed) {
@@ -216,20 +190,20 @@ function renderDropdown() {
     buyerDropdown.innerHTML = "";
     return;
   }
-
+ 
   const matches = allBuyers
     .filter(b => b.toLowerCase().startsWith(typed))
     .sort((a, b) => a.localeCompare(b));
-
+ 
   if (matches.length === 0) {
     buyerDropdown.classList.remove("show");
     buyerDropdown.innerHTML = "";
     return;
   }
-
+ 
   buyerDropdown.innerHTML = matches.map(b => `<div class="buyer-option">${b}</div>`).join("");
   buyerDropdown.classList.add("show");
-
+ 
   buyerDropdown.querySelectorAll(".buyer-option").forEach(opt => {
     opt.onclick = () => {
       buyerInput.value = opt.textContent;
@@ -238,7 +212,7 @@ function renderDropdown() {
     };
   });
 }
-
+ 
 buyerInput.addEventListener("input", renderDropdown);
 buyerInput.addEventListener("focus", renderDropdown);
 document.addEventListener("click", (e) => {
@@ -246,7 +220,7 @@ document.addEventListener("click", (e) => {
     buyerDropdown.classList.remove("show");
   }
 });
-
+ 
 async function fetchData() {
   if (SCRIPT_URL.includes("PASTE_YOUR")) return;
   try {
@@ -261,7 +235,7 @@ async function fetchData() {
     // silently keep working from local cache
   }
 }
-
+ 
 // Push queued entries to the Sheet, one at a time, waiting for a confirmed
 // response before removing each from the queue. Every entry carries a
 // unique id; the server tracks which ids it has already written, so even
@@ -272,7 +246,7 @@ async function syncQueue() {
   if (syncing || queue.length === 0) return;
   if (SCRIPT_URL.includes("PASTE_YOUR")) return;
   if (!navigator.onLine) return;
-
+ 
   syncing = true;
   while (queue.length > 0) {
     const entry = queue[0];
@@ -289,20 +263,15 @@ async function syncQueue() {
       const text = await res.text();
       let json;
       try { json = JSON.parse(text); } catch (e) { json = null; }
-
+ 
       if (!res.ok || !json || json.error || json.ok !== true) {
         console.error("Sync failed for entry", entry, "response:", text);
         setStatus("Couldn't save to the sheet — check the Apps Script deployment.", "error");
         break; // stop and keep this entry (and the rest) queued — safe to retry, it's deduped server-side
       }
-
+ 
       queue.shift();
       saveQueue();
-      renderPendingList();
-
-      if (entry.id === lastSubmittedId) {
-        setStatus(`Submitted ${entry.buyer} for ${entry.lots.length} lot(s). <span class="tick">✓ Synced</span>`, "ok");
-      }
     } catch (err) {
       console.error("Network error during sync:", err);
       break; // network-level failure — safe to retry later, server-side id check prevents duplicates
@@ -311,15 +280,15 @@ async function syncQueue() {
   syncing = false;
   fetchData();
 }
-
+ 
 saveBtn.onclick = () => {
   const buyer = buyerInput.value.trim();
   const checkedLots = Array.from(lotsBox.querySelectorAll(".lot-chip.checked")).map(c => c.dataset.key);
   const isVet = vetCheckbox.checked;
-
+ 
   if (!buyer) { setStatus("Enter a buyer name first.", "error"); return; }
   if (checkedLots.length === 0) { setStatus("Tick at least one lot.", "error"); return; }
-
+ 
   const id = makeId();
   queue.push({
     id,
@@ -329,35 +298,33 @@ saveBtn.onclick = () => {
     timestamp: new Date().toISOString(),
   });
   saveQueue();
-  renderPendingList();
-  lastSubmittedId = id;
-
+ 
   if (!allBuyers.some(b => b.toLowerCase() === buyer.toLowerCase())) {
     allBuyers.push(buyer);
     localStorage.setItem("buyerCache", JSON.stringify(allBuyers));
     refreshBuyerList();
   }
-
-  setStatus(`Submitted ${buyer} for ${checkedLots.length} lot(s). Saving…`, "ok");
+ 
+  setStatus("");
   buyerInput.value = "";
   buyerDropdown.classList.remove("show");
   buyerDropdown.innerHTML = "";
   vetCheckbox.checked = false;
   lotsBox.querySelectorAll(".lot-chip.checked").forEach(c => c.classList.remove("checked"));
   buyerInput.focus();
-
+ 
   syncQueue();
 };
-
+ 
 window.addEventListener("online", syncQueue);
 window.addEventListener("focus", syncQueue);
 setInterval(syncQueue, 30000);
-
+ 
 renderLots();
 refreshBuyerList();
-renderPendingList();
 renderRecent();
 fetchData().then(syncQueue);
 </script>
 </body>
 </html>
+ 
