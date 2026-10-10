@@ -44,6 +44,11 @@
     border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: white;
     min-height: 48px;
   }
+  .lot-group-title {
+    flex: 0 0 100%; font-size: 12px; font-weight: 600; color: #888;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px;
+  }
+  .lot-group-title:first-child { margin-top: 0; }
   .lot-chip {
     display: flex; align-items: center; gap: 6px;
     border: 1px solid #ccc; border-radius: 20px; padding: 8px 14px;
@@ -105,16 +110,19 @@
 <div id="recentList"></div>
 
 <script>
-// ==== SET THIS to your deployed Apps Script web app URL ====
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxYTKnw9Tofp26zia62uTSGgPYYkelWYVZn9mtMbwNC_aEHAjm5yOKua6y5OLy4nKOMBw/exec";
-// =============================================================
+// Apps Script web app URL
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxGhOrZZesfcfsL5Xt3lIpAPP2HD80Z0ydSgywX_Mdz1dARtmUO1PWZbo4D0AqBHo4z/exec";
 
 // Each lot has a stable "key" (used as the column header AND the sheet tab
 // name in Google Sheets — must match exactly) and a "label" (shown on the button).
 const LOTS = [
-  { key: "Lot 195 - Queen Jojo", label: "Lot 195  Shaquille x Queen Jojo" },
-  { key: "Lot 391 - Big Break",  label: "Lot 391  Palace Pier x Big Break" },
-  { key: "Lot 413 - Casimia",    label: "Lot 413  New Bay x Casimia" },
+  { group: "Monday",    key: "Lot 482 - First Party",         label: "Lot 482  Asymmetric x First Party" },
+  { group: "Monday",    key: "Lot 524 - Greatestshowgirl",    label: "Lot 524  Sergei Prokofiev x Greatestshowgirl" },
+  { group: "Monday",    key: "Lot 527 - Guanina",             label: "Lot 527  Too Darn Hot x Guanina" },
+  { group: "Tuesday",   key: "Lot 777 - Perfect Showdance",   label: "Lot 777  Dragon Symbol x Perfect Showdance" },
+  { group: "Tuesday",   key: "Lot 908 - Shelter",             label: "Lot 908  Kodi Bear x Shelter" },
+  { group: "Wednesday", key: "Lot 1076 - Accept The Outcome", label: "Lot 1076  Showcasing x Accept The Outcome" },
+  { group: "Book 3",    key: "Lot 1638 - Law Keeper",         label: "Lot 1638  Calyx x Law Keeper" },
 ];
 
 const buyerInput = document.getElementById("buyerInput");
@@ -139,7 +147,15 @@ function makeId() {
 
 function renderLots() {
   lotsBox.innerHTML = "";
+  let lastGroup = null;
   LOTS.forEach(lot => {
+    if (lot.group !== lastGroup) {
+      const heading = document.createElement("div");
+      heading.className = "lot-group-title";
+      heading.textContent = lot.group;
+      lotsBox.appendChild(heading);
+      lastGroup = lot.group;
+    }
     const chip = document.createElement("div");
     chip.className = "lot-chip";
     chip.textContent = lot.label;
@@ -245,7 +261,6 @@ document.addEventListener("click", (e) => {
 });
 
 async function fetchData() {
-  if (SCRIPT_URL.includes("PASTE_YOUR")) return;
   const syncedBeforeFetch = justSynced.map(e => e.id);
   try {
     const res = await fetch(SCRIPT_URL + "?action=data");
@@ -275,7 +290,6 @@ async function fetchData() {
 // written twice — this is what prevents duplicate entries.
 async function syncQueue() {
   if (syncing || queue.length === 0) return;
-  if (SCRIPT_URL.includes("PASTE_YOUR")) return;
   if (!navigator.onLine) return;
 
   syncing = true;
